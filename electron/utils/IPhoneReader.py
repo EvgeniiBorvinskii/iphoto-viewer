@@ -7,8 +7,8 @@ import sys
 import json
 
 try:
-    from pymobiledevice3.lockdown import LockdownClient
-    from pymobiledevice3.services.afc import AfcService
+    from pymobiledevice3.lockdown import create_using_usbmux
+    from pymobiledevice3.services.afc import AfcService, AfcShell
     from pymobiledevice3.services.mobile_image_mounter import MobileImageMounterService
     import os
     
@@ -28,7 +28,7 @@ try:
     def get_device_info(udid=None):
         """Get device information"""
         try:
-            lockdown = LockdownClient(udid=udid)
+            lockdown = create_using_usbmux(serial=udid)
             info = {
                 "DeviceName": lockdown.get_value(key='DeviceName'),
                 "ProductType": lockdown.get_value(key='ProductType'),
@@ -44,7 +44,7 @@ try:
     def list_photos(udid=None):
         """List all photos from iPhone DCIM folder"""
         try:
-            lockdown = LockdownClient(udid=udid)
+            lockdown = create_using_usbmux(serial=udid)
             afc = AfcService(lockdown=lockdown)
             
             photos = []
@@ -85,7 +85,7 @@ try:
     def get_photo(udid, photo_path, output_path):
         """Download a specific photo"""
         try:
-            lockdown = LockdownClient(udid=udid)
+            lockdown = create_using_usbmux(serial=udid)
             afc = AfcService(lockdown=lockdown)
             
             # Read photo data
