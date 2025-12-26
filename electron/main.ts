@@ -2,11 +2,11 @@ import { app, BrowserWindow, ipcMain, screen } from 'electron';
 import * as path from 'path';
 import { exec } from 'child_process';
 import { IPhoneService } from './services/IPhoneService';
-import { PhotoService } from './services/PhotoService';
+import { SimplePhotoService } from './services/SimplePhotoService';
 
 let mainWindow: BrowserWindow | null = null;
 let iPhoneService: IPhoneService;
-let photoService: PhotoService;
+let photoService: SimplePhotoService;
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
@@ -63,7 +63,7 @@ function createWindow() {
 
 app.whenReady().then(() => {
   iPhoneService = new IPhoneService();
-  photoService = new PhotoService();
+  photoService = new SimplePhotoService();
   
   createWindow();
 
@@ -110,6 +110,9 @@ function setupIPCHandlers() {
   // iPhone connection
   ipcMain.handle('connect-iphone-usb', async () => {
     try {
+      console.log('🔌 USB connection requested - reloading photos...');
+      // Force reload photos when connecting
+      await photoService.reload();
       return await iPhoneService.connectUSB();
     } catch (error) {
       console.error('USB connection error:', error);
@@ -119,6 +122,9 @@ function setupIPCHandlers() {
 
   ipcMain.handle('connect-iphone-wifi', async (_, ipAddress: string) => {
     try {
+      console.log('📡 WiFi connection requested - reloading photos...');
+      // Force reload photos when connecting
+      await photoService.reload();
       return await iPhoneService.connectWiFi(ipAddress);
     } catch (error) {
       console.error('WiFi connection error:', error);
