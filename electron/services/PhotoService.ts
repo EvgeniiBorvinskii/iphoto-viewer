@@ -50,80 +50,142 @@ export class PhotoService {
   }
 
   /**
-   * Find iPhone DCIM folder on Windows
+   * Find iPhone DCIM folder on Windows using Shell COM object
    */
   private async findIPhoneDCIMPath(): Promise<void> {
     if (this.dcimPath) return; // Already found
 
     try {
-      // On Windows, iPhone appears as a portable device
-      // Typical path: This PC\Apple iPhone\Internal Storage\DCIM
+      console.log('Searching for iPhone via Windows Shell...');
       
-      // Try to find via PowerShell
-      const { stdout } = await execAsync(
-        'powershell -Command "Get-PnpDevice | Where-Object {$_.FriendlyName -like \'*iPhone*\'} | Select-Object -ExpandProperty FriendlyName"'
-      );
-      
-      if (stdout.includes('iPhone')) {
-        console.log('iPhone device detected:', stdout.trim());
+      // Use PowerShell with Shell.Application COM object to access portable devices
+      const psScript = `
+        $shell = New-Object -ComObject Shell.Application
+        $computer = $shell.Namespace(17) # MyComputerFolder
         
-        // Try common Windows paths for iPhone
-        const possiblePaths = [
-          'C:\\Users\\' + process.env.USERNAME + '\\Pictures\\iPhone',
-          // Windows Phone/Portable Device paths are complex, 
-          // for now we'll use mock data but log that iPhone is connected
-        ];
-        
-        for (const testPath of possiblePaths) {
-          try {
-            const stats = await fs.stat(testPath);
-            if (stats.isDirectory()) {
-              this.dcimPath = testPath;
-              console.log('Found iPhone photos at:', testPath);
-              break;
+        foreach ($device in $computer.Items()) {
+          if ($device.Name -like "*iPhone*" -or $device.Name -like "*Apple*") {
+            Write-Host "DEVICE_FOUND:$($device.Name)"
+            
+            # Try to access Internal Storage
+            $deviceFolder = $shell.Namespace($device.Path)
+            foreach ($storage in $deviceFolder.Items()) {
+              if ($storage.Name -like "*Internal Storage*" -or $storage.Name -eq "Internal Storage") {
+                Write-Host "STORAGE_FOUND:$($storage.Path)"
+                
+                # Try to find DCIM folder
+                $storageFolder = $shell.Namespace($storage.Path)
+                foreach ($folder in $storageFolder.Items()) {
+                  if ($folder.Name -eq "DCIM") {
+                    Write-Host "DCIM_FOUND:$($folder.Path)"
+                  }
+                }
+              }
             }
-          } catch {
-            // Path doesn't exist, continue
           }
         }
+      `;
+      
+      const { stdout, stderr } = await execAsync(
+        `powershell -Command "${psScript.replace(/"/g, '\\"')}"`
+      );
+      
+      console.log('PowerShell output:', stdout);
+      if (stderr) console.log('PowerShell errors:', stderr);
+      
+      // Parse output for DCIM path
+      const lines = stdout.split('\n');
+      for (const line of lines) {
+        if (line.includes('DEVICE_FOUND:')) {
+          console.log('✓ iPhone detected:', line.replace('DEVICE_FOUND:', '').trim());
+        }
+        if (line.includes('STORAGE_FOUND:')) {
+          console.log('✓ Storage found:', line.replace('STORAGE_FOUND:', '').trim());
+        }
+        if (line.includes('DCIM_FOUND:')) {
+          this.dcimPath = line.replace('DCIM_FOUND:', '').trim();
+          console.log('✓ DCIM folder found:', this.dcimPath);
+          break;
+        }
+      }
+      
+      if (!this.dcimPath) {
+        console.log('⚠ iPhone not found or DCIM not accessible');
+        console.log('Make sure:');
+        console.log('1. iPhone is unlocked');
+        console.log('2. You tapped "Trust This Computer"');
+        console.log('3. iPhone is visible in Windows Explorer');
       }
     } catch (error) {
-      console.log('Could not detect iPhone via PowerShell:', error);
+      console.error('Error detecting iPhone:', error);
     }
   }
 
   /**
-   * Get real photos from iPhone DCIM folder
+   * Get real photos from iPhone DCIM folder using Shell COM
    */
   private async getRealPhotos(offset: number, limit: number): Promise<PhotosResponse> {
     try {
+      console.log('Getting real photos from iPhone...');
       const photos: Photo[] = [];
       
-      // Read all files from DCIM
-      const files = await this.scanDirectory(this.dcimPath);
-      const imageFiles = files.filter(f => 
-        /\.(jpg|jpeg|png|heic|heif)$/i.test(f)
+      // Use PowerShell to enumerate files in DCIM via Shell COM
+      const psScript = `
+        $shell = New-Object -ComObject Shell.Application
+        $dcim = $shell.Namespace("${this.dcimPath.replace(/\\/g, '\\\\')}")
+        
+        function Get-PhotoFiles($folder, $depth = 0) {
+          if ($depth -gt 5) { return }
+          
+          foreach ($item in $folder.Items()) {
+            if ($item.IsFolder) {
+              $subFolder = $shell.Namespace($item.Path)
+              Get-PhotoFiles $subFolder ($depth + 1)
+            } else {
+              $ext = [System.IO.Path]::GetExtension($item.Name).ToLower()
+              if ($ext -match '\\.(jpg|jpeg|png|heic|heif)$') {
+                $size = $folder.GetDetailsOf($item, 1)
+                $dateModified = $folder.GetDetailsOf($item, 3)
+                Write-Host "PHOTO:$($item.Name)|$($item.Path)|$size|$dateModified"
+              }
+            }
+          }
+        }
+        
+        Get-PhotoFiles $dcim
+      `;
+      
+      const { stdout } = await execAsync(
+        `powershell -Command "${psScript.replace(/"/g, '\\"')}"`,
+        { maxBuffer: 1024 * 1024 * 10 } // 10MB buffer for large photo lists
       );
       
-      this.realPhotosCount = imageFiles.length;
-      console.log(`Found ${this.realPhotosCount} real photos`);
+      // Parse photo information
+      const photoLines = stdout.split('\n').filter(line => line.includes('PHOTO:'));
+      this.realPhotosCount = photoLines.length;
+      
+      console.log(`Found ${this.realPhotosCount} real photos on iPhone`);
       
       // Get requested slice
-      const slice = imageFiles.slice(offset, offset + limit);
+      const slice = photoLines.slice(offset, offset + limit);
       
-      for (const filePath of slice) {
-        const stats = await fs.stat(filePath);
-        const fileName = path.basename(filePath);
-        
-        photos.push({
-          id: Buffer.from(filePath).toString('base64'),
-          filename: fileName,
-          dateCreated: stats.birthtime,
-          dateModified: stats.mtime,
-          size: stats.size,
-          width: 4032, // We'll set defaults for now
-          height: 3024,
-        });
+      for (const line of slice) {
+        const parts = line.replace('PHOTO:', '').split('|');
+        if (parts.length >= 2) {
+          const filename = parts[0].trim();
+          const filepath = parts[1].trim();
+          const size = parseInt(parts[2]?.trim() || '0') || 1000000;
+          
+          photos.push({
+            id: Buffer.from(filepath).toString('base64'),
+            filename: filename,
+            dateCreated: new Date(),
+            dateModified: new Date(),
+            size: size,
+            width: 4032,
+            height: 3024,
+          });
+        }
       }
       
       return {
@@ -197,14 +259,44 @@ export class PhotoService {
         const filePath = Buffer.from(photoId, 'base64').toString('utf-8');
         
         try {
-          // Check if file exists
-          await fs.stat(filePath);
+          // Use PowerShell to read file from iPhone via Shell COM
+          const psScript = `
+            $shell = New-Object -ComObject Shell.Application
+            $folder = $shell.Namespace([System.IO.Path]::GetDirectoryName("${filePath.replace(/\\/g, '\\\\')}"))
+            $file = $folder.ParseName([System.IO.Path]::GetFileName("${filePath.replace(/\\/g, '\\\\')}"))
+            
+            if ($file) {
+              # Copy to temp location
+              $tempPath = [System.IO.Path]::GetTempPath() + [System.IO.Path]::GetFileName("${filePath.replace(/\\/g, '\\\\')}")
+              $folder.CopyHere($file, 16) # 16 = No UI
+              
+              # Read as base64
+              $bytes = [System.IO.File]::ReadAllBytes($tempPath)
+              $base64 = [Convert]::ToBase64String($bytes)
+              Write-Host "DATA:$base64"
+              
+              # Cleanup
+              Remove-Item $tempPath -ErrorAction SilentlyContinue
+            }
+          `;
           
-          // For now, we'll use file:// protocol for local images
-          // In production, we'd generate proper thumbnails
-          return `file:///${filePath.replace(/\\/g, '/')}`;
+          const { stdout } = await execAsync(
+            `powershell -Command "${psScript.replace(/"/g, '\\"')}"`,
+            { maxBuffer: 1024 * 1024 * 50 } // 50MB buffer for images
+          );
+          
+          const dataMatch = stdout.match(/DATA:(.+)/);
+          if (dataMatch) {
+            // Detect image type from filename
+            const ext = path.extname(filePath).toLowerCase();
+            const mimeType = ext === '.png' ? 'image/png' : 
+                           ext === '.heic' || ext === '.heif' ? 'image/heic' : 
+                           'image/jpeg';
+            
+            return `data:${mimeType};base64,${dataMatch[1].trim()}`;
+          }
         } catch (error) {
-          console.error('Error reading photo file:', error);
+          console.error('Error reading photo from iPhone:', error);
         }
       }
       
