@@ -1,5 +1,9 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 export interface Photo {
   id: string;
@@ -19,48 +23,217 @@ export interface PhotosResponse {
 
 export class PhotoService {
   private photoCache: Map<string, Photo> = new Map();
+  private dcimPath: string = '';
+  private realPhotosCount: number = 0;
 
+  /**
+   * Try to get photos from connected iPhone
+   */
   async getPhotos(offset: number = 0, limit: number = 50): Promise<PhotosResponse> {
     try {
-      // Simulated photo data for development
-      // In production, this will fetch from iPhone via libimobiledevice
+      console.log(`Getting photos: offset=${offset}, limit=${limit}`);
       
-      const mockPhotos: Photo[] = Array.from({ length: 100 }, (_, i) => ({
-        id: `photo-${i + 1}`,
-        filename: `IMG_${String(i + 1).padStart(4, '0')}.jpg`,
-        dateCreated: new Date(Date.now() - Math.random() * 365 * 24 * 60 * 60 * 1000),
-        dateModified: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000),
-        size: Math.floor(Math.random() * 5000000) + 1000000,
-        width: 4032,
-        height: 3024,
-      }));
-
-      const paginatedPhotos = mockPhotos.slice(offset, offset + limit);
+      // Try to find iPhone DCIM folder
+      await this.findIPhoneDCIMPath();
       
-      return {
-        photos: paginatedPhotos,
-        total: mockPhotos.length,
-      };
+      if (this.dcimPath) {
+        console.log('Found iPhone DCIM path:', this.dcimPath);
+        return await this.getRealPhotos(offset, limit);
+      } else {
+        console.log('iPhone DCIM not found, using mock data');
+        return await this.getMockPhotos(offset, limit);
+      }
     } catch (error) {
       console.error('Error fetching photos:', error);
       return { photos: [], total: 0 };
     }
   }
 
+  /**
+   * Find iPhone DCIM folder on Windows
+   */
+  private async findIPhoneDCIMPath(): Promise<void> {
+    if (this.dcimPath) return; // Already found
+
+    try {
+      // On Windows, iPhone appears as a portable device
+      // Typical path: This PC\Apple iPhone\Internal Storage\DCIM
+      
+      // Try to find via PowerShell
+      const { stdout } = await execAsync(
+        'powershell -Command "Get-PnpDevice | Where-Object {$_.FriendlyName -like \'*iPhone*\'} | Select-Object -ExpandProperty FriendlyName"'
+      );
+      
+      if (stdout.includes('iPhone')) {
+        console.log('iPhone device detected:', stdout.trim());
+        
+        // Try common Windows paths for iPhone
+        const possiblePaths = [
+          'C:\\Users\\' + process.env.USERNAME + '\\Pictures\\iPhone',
+          // Windows Phone/Portable Device paths are complex, 
+          // for now we'll use mock data but log that iPhone is connected
+        ];
+        
+        for (const testPath of possiblePaths) {
+          try {
+            const stats = await fs.stat(testPath);
+            if (stats.isDirectory()) {
+              this.dcimPath = testPath;
+              console.log('Found iPhone photos at:', testPath);
+              break;
+            }
+          } catch {
+            // Path doesn't exist, continue
+          }
+        }
+      }
+    } catch (error) {
+      console.log('Could not detect iPhone via PowerShell:', error);
+    }
+  }
+
+  /**
+   * Get real photos from iPhone DCIM folder
+   */
+  private async getRealPhotos(offset: number, limit: number): Promise<PhotosResponse> {
+    try {
+      const photos: Photo[] = [];
+      
+      // Read all files from DCIM
+      const files = await this.scanDirectory(this.dcimPath);
+      const imageFiles = files.filter(f => 
+        /\.(jpg|jpeg|png|heic|heif)$/i.test(f)
+      );
+      
+      this.realPhotosCount = imageFiles.length;
+      console.log(`Found ${this.realPhotosCount} real photos`);
+      
+      // Get requested slice
+      const slice = imageFiles.slice(offset, offset + limit);
+      
+      for (const filePath of slice) {
+        const stats = await fs.stat(filePath);
+        const fileName = path.basename(filePath);
+        
+        photos.push({
+          id: Buffer.from(filePath).toString('base64'),
+          filename: fileName,
+          dateCreated: stats.birthtime,
+          dateModified: stats.mtime,
+          size: stats.size,
+          width: 4032, // We'll set defaults for now
+          height: 3024,
+        });
+      }
+      
+      return {
+        photos,
+        total: this.realPhotosCount,
+      };
+    } catch (error) {
+      console.error('Error reading real photos:', error);
+      return { photos: [], total: 0 };
+    }
+  }
+
+  /**
+   * Recursively scan directory for image files
+   */
+  private async scanDirectory(dirPath: string): Promise<string[]> {
+    const files: string[] = [];
+    
+    try {
+      const entries = await fs.readdir(dirPath, { withFileTypes: true });
+      
+      for (const entry of entries) {
+        const fullPath = path.join(dirPath, entry.name);
+        
+        if (entry.isDirectory()) {
+          const subFiles = await this.scanDirectory(fullPath);
+          files.push(...subFiles);
+        } else if (entry.isFile()) {
+          files.push(fullPath);
+        }
+      }
+    } catch (error) {
+      console.error('Error scanning directory:', dirPath, error);
+    }
+    
+    return files;
+  }
+
+  /**
+   * Get mock photos for testing
+   */
+  private async getMockPhotos(offset: number, limit: number): Promise<PhotosResponse> {
+    console.log('Using mock photos for demo');
+    
+    // Create more realistic mock data
+    const totalMockPhotos = 250; // More realistic number
+    const mockPhotos: Photo[] = [];
+    
+    for (let i = offset; i < Math.min(offset + limit, totalMockPhotos); i++) {
+      mockPhotos.push({
+        id: `mock-photo-${i + 1}`,
+        filename: `IMG_${String(i + 1).padStart(4, '0')}.jpg`,
+        dateCreated: new Date(Date.now() - Math.random() * 365 * 24 * 60 * 60 * 1000),
+        dateModified: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000),
+        size: Math.floor(Math.random() * 5000000) + 1000000,
+        width: 4032,
+        height: 3024,
+      });
+    }
+    
+    return {
+      photos: mockPhotos,
+      total: totalMockPhotos,
+    };
+  }
+
   async getThumbnail(photoId: string): Promise<string | null> {
     try {
-      // Generate placeholder thumbnail
-      // In production, fetch actual thumbnail from iPhone
-      return `data:image/svg+xml;base64,${Buffer.from(
-        `<svg width="200" height="150" xmlns="http://www.w3.org/2000/svg">
-          <rect width="200" height="150" fill="#${Math.floor(Math.random()*16777215).toString(16)}"/>
-          <text x="50%" y="50%" text-anchor="middle" fill="white" font-size="14">${photoId}</text>
-        </svg>`
-      ).toString('base64')}`;
+      // Try to get real thumbnail if we have DCIM path
+      if (this.dcimPath && !photoId.startsWith('mock-')) {
+        const filePath = Buffer.from(photoId, 'base64').toString('utf-8');
+        
+        try {
+          // Check if file exists
+          await fs.stat(filePath);
+          
+          // For now, we'll use file:// protocol for local images
+          // In production, we'd generate proper thumbnails
+          return `file:///${filePath.replace(/\\/g, '/')}`;
+        } catch (error) {
+          console.error('Error reading photo file:', error);
+        }
+      }
+      
+      // Fall back to mock thumbnail
+      return this.generateMockThumbnail(photoId);
     } catch (error) {
-      console.error('Error getting thumbnail:', error);
+      console.error('Error generating thumbnail:', error);
       return null;
     }
+  }
+
+  /**
+   * Generate mock thumbnail as SVG
+   */
+  private generateMockThumbnail(photoId: string): string {
+    const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F'];
+    const colorIndex = parseInt(photoId.split('-').pop() || '0') % colors.length;
+    const color = colors[colorIndex];
+    
+    const svg = `
+      <svg width="300" height="300" xmlns="http://www.w3.org/2000/svg">
+        <rect width="300" height="300" fill="${color}"/>
+        <text x="50%" y="50%" font-size="20" fill="white" text-anchor="middle" dominant-baseline="middle">
+          ${photoId}
+        </text>
+      </svg>
+    `;
+    
+    return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
   }
 
   async getFullResolution(photoId: string): Promise<string | null> {
