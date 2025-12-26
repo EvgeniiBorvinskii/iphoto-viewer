@@ -2,7 +2,6 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { app } from 'electron';
 import * as os from 'os';
 
 const execAsync = promisify(exec);
@@ -25,39 +24,33 @@ export interface PhotosResponse {
 
 export class PhotoService {
   private photoCache: Map<string, Photo> = new Map();
-  private dcimPath: string = '';
   private realPhotosCount: number = 0;
-  private devicePath: string = '';
+  private tempPhotoDir: string = '';
+  private isLoadingPhotos: boolean = false;
   private scriptPath: string = '';
-  private photosCache: any[] = [];
 
   constructor() {
+    // Create temp directory for iPhone photos
+    this.tempPhotoDir = path.join(os.tmpdir(), 'iphoto-viewer-cache');
+    
     // Get path to PowerShell script
-    const isDev = !app.isPackaged;
-    if (isDev) {
-      this.scriptPath = path.join(__dirname, '..', 'utils', 'WindowsPortableDevices.ps1');
-    } else {
-      this.scriptPath = path.join(process.resourcesPath, 'electron', 'utils', 'WindowsPortableDevices.ps1');
-    }
+    this.scriptPath = path.join(__dirname, '..', 'utils', 'IPhonePhotosReader.ps1');
   }
 
   /**
-   * Try to get photos from connected iPhone
+   * Get photos from connected iPhone
    */
   async getPhotos(offset: number = 0, limit: number = 50): Promise<PhotosResponse> {
     try {
       console.log(`Getting photos: offset=${offset}, limit=${limit}`);
       
-      // Try to find iPhone DCIM folder
-      await this.findIPhoneDCIMPath();
-      
-      if (this.dcimPath) {
-        console.log('Found iPhone DCIM path:', this.dcimPath);
-        return await this.getRealPhotos(offset, limit);
-      } else {
-        console.log('iPhone DCIM not found, using mock data');
-        return await this.getMockPhotos(offset, limit);
+      // Try to load photos from iPhone using PowerShell script (only once)
+      if (!this.isLoadingPhotos && this.realPhotosCount === 0) {
+        await this.loadPhotosFromIPhone();
       }
+      
+      // Read photos from temp directory
+      return await this.getPhotosFromTempDir(offset, limit);
     } catch (error) {
       console.error('Error fetching photos:', error);
       return { photos: [], total: 0 };
@@ -65,200 +58,133 @@ export class PhotoService {
   }
 
   /**
-   * Find iPhone using Windows Portable Devices API
+   * Load photos from iPhone using PowerShell script
    */
-  private async findIPhoneDCIMPath(): Promise<void> {
-    if (this.devicePath) return; // Already found
+  private async loadPhotosFromIPhone(): Promise<void> {
+    if (this.isLoadingPhotos) {
+      console.log('Already loading photos...');
+      return;
+    }
+
+    this.isLoadingPhotos = true;
 
     try {
-      console.log('Searching for iPhone using Windows Portable Devices API...');
+      console.log('═══════════════════════════════════════════════');
+      console.log('  Loading photos from iPhone...');
+      console.log('═══════════════════════════════════════════════');
       
-      // Run PowerShell script to list devices
-      const { stdout, stderr } = await execAsync(
-        `powershell -NoProfile -ExecutionPolicy Bypass -File "${this.scriptPath}" -Action list-devices`,
-        { maxBuffer: 1024 * 1024 * 10 }
-      );
+      // Create temp directory
+      try {
+        await fs.mkdir(this.tempPhotoDir, { recursive: true });
+        console.log('✓ Temp directory created:', this.tempPhotoDir);
+      } catch (error) {
+        // Directory might already exist
+      }
+      
+      console.log('✓ Script path:', this.scriptPath);
+      
+      // Run PowerShell script to copy photos from iPhone
+      const psCommand = `powershell -NoProfile -ExecutionPolicy Bypass -File "${this.scriptPath}" -TempDir "${this.tempPhotoDir}" -MaxPhotos 500`;
+      
+      console.log('✓ Executing PowerShell script...');
+      console.log('  This may take a few minutes...');
+      
+      const { stdout, stderr } = await execAsync(psCommand, {
+        maxBuffer: 1024 * 1024 * 50, // 50MB buffer
+        timeout: 300000 // 5 minutes timeout
+      });
+      
+      console.log('\nPowerShell Output:');
+      console.log('─────────────────────────────────────────────');
+      console.log(stdout);
+      console.log('─────────────────────────────────────────────');
       
       if (stderr) {
-        console.error('PowerShell stderr:', stderr);
+        console.log('PowerShell Errors:', stderr);
       }
-      
-      console.log('PowerShell output:', stdout);
-      
-      try {
-        const devices = JSON.parse(stdout);
-        
-        if (Array.isArray(devices) && devices.length > 0) {
-          // Use first iPhone found
-          this.devicePath = devices[0].Path;
-          console.log('✓ iPhone found:', devices[0].Name);
-          console.log('Device path:', this.devicePath);
-          
-          // Now get photos from device
-          await this.loadPhotosFromDevice();
-        } else {
-          console.log('⚠ No iPhone devices found');
-          this.showTroubleshootingInfo();
-        }
-      } catch (parseError) {
-        console.error('Failed to parse device list:', parseError);
-        console.log('Raw output:', stdout);
-        this.showTroubleshootingInfo();
-      }
-    } catch (error) {
-      console.error('Error detecting iPhone:', error);
-      this.showTroubleshootingInfo();
-    }
-  }
-
-  /**
-   * Load photos from iPhone device
-   */
-  private async loadPhotosFromDevice(): Promise<void> {
-    if (!this.devicePath) return;
-
-    try {
-      console.log('Loading photos from iPhone...');
-      
-      const { stdout } = await execAsync(
-        `powershell -NoProfile -ExecutionPolicy Bypass -File "${this.scriptPath}" -Action list-photos -DeviceId "${this.devicePath}"`,
-        { maxBuffer: 1024 * 1024 * 50, timeout: 60000 }
-      );
       
       // Parse output
-      const lines = stdout.split('\n');
-      
-      for (const line of lines) {
-        if (line.includes('PHOTO_COUNT:')) {
-          this.realPhotosCount = parseInt(line.replace('PHOTO_COUNT:', '').trim()) || 0;
-          console.log(`✓ Found ${this.realPhotosCount} photos on iPhone`);
-        } else if (line.includes('PHOTO:{')) {
-          try {
-            const jsonStr = line.substring(line.indexOf('{'));
-            const photoData = JSON.parse(jsonStr);
-            this.photosCache.push(photoData);
-          } catch (e) {
-            // Skip malformed JSON
-          }
-        }
+      if (stdout.includes('PHOTO_COPIED:')) {
+        const photoLines = stdout.split('\n').filter(line => line.includes('PHOTO_COPIED:'));
+        this.realPhotosCount = photoLines.length;
+        console.log(`\n✓ Successfully loaded ${this.realPhotosCount} photos from iPhone!`);
+      } else if (stdout.includes('ERROR:')) {
+        const errorMsg = stdout.match(/ERROR:(.+)/)?.[1] || 'Unknown error';
+        console.error('\n✗ Failed to load photos:', errorMsg);
+        console.log('\nTroubleshooting:');
+        console.log('1. Убедитесь, что iPhone подключен и разблокирован');
+        console.log('2. Откройте "Этот компьютер" в Windows Explorer');
+        console.log('3. Проверьте, виден ли iPhone там');
+        console.log('4. Попробуйте открыть iPhone в Explorer вручную');
+      } else {
+        console.log('\n⚠ No photos were copied');
+        console.log('iPhone might not be accessible via Windows Explorer');
       }
       
-      console.log(`Loaded ${this.photosCache.length} photos into cache`);
+      console.log('═══════════════════════════════════════════════\n');
       
     } catch (error) {
-      console.error('Error loading photos from device:', error);
-    }
-  }
-
-  private showTroubleshootingInfo(): void {
-    console.log('');
-    console.log('⚠ iPhone detected but photos not accessible');
-    console.log('');
-    console.log('To access iPhone photos on Windows:');
-    console.log('1. Connect iPhone via USB cable');
-    console.log('2. Unlock iPhone and trust this computer if prompted');
-    console.log('3. Open Windows Explorer and verify iPhone appears under "This PC"');
-    console.log('4. You can open iPhone in Explorer and browse DCIM folder');
-    console.log('');
-    console.log('Alternative options:');
-    console.log('- Use iCloud for Windows to sync photos automatically');
-    console.log('- Import photos using Windows Photos app');
-    console.log('- Enable iTunes photo sync');
-    console.log('');
-    console.log('For now, showing demo photos...');
-  }
-
-  /**
-   * Alternative iPhone detection using Windows Portable Device API
-   */
-  private async tryAlternativeIPhoneDetection(): Promise<void> {
-    try {
-      console.log('Trying alternative detection via WMIC...');
-      
-      // Try to find iPhone via WMIC
-      const { stdout: wmicOutput } = await execAsync(
-        'wmic logicaldisk where drivetype=2 get caption,volumename'
-      );
-      
-      console.log('WMIC output:', wmicOutput);
-      
-      // Try to find iPhone in mounted drives
-      const drives = wmicOutput.split('\n').filter(line => 
-        line.includes('iPhone') || line.includes('Apple')
-      );
-      
-      if (drives.length > 0) {
-        console.log('Found iPhone drives:', drives);
-        
-        // Try common paths
-        const possiblePaths = [
-          'E:\\DCIM', 'F:\\DCIM', 'G:\\DCIM', 'H:\\DCIM',
-          'I:\\DCIM', 'J:\\DCIM', 'K:\\DCIM', 'L:\\DCIM'
-        ];
-        
-        for (const testPath of possiblePaths) {
-          try {
-            // Use PowerShell to check if path exists and has photos
-            const checkScript = `
-              if (Test-Path "${testPath}") {
-                $files = Get-ChildItem "${testPath}" -Recurse -File | Where-Object { $_.Extension -match '\\.(jpg|jpeg|png|heic|heif)$' } | Measure-Object
-                if ($files.Count -gt 0) {
-                  Write-Host "DCIM_FOUND:${testPath}"
-                  Write-Host "PHOTO_COUNT:$($files.Count)"
-                }
-              }
-            `.trim();
-            
-            const { stdout: checkOutput } = await execAsync(
-              `powershell -NoProfile -Command "${checkScript}"`
-            );
-            
-            if (checkOutput.includes('DCIM_FOUND:')) {
-              const match = checkOutput.match(/DCIM_FOUND:(.+)/);
-              if (match && match[1]) {
-                this.dcimPath = match[1].trim();
-                const countMatch = checkOutput.match(/PHOTO_COUNT:(\d+)/);
-                if (countMatch && countMatch[1]) {
-                  this.realPhotosCount = parseInt(countMatch[1]);
-                  console.log(`✓ Found ${this.realPhotosCount} photos in ${this.dcimPath}`);
-                }
-              }
-              break;
-            }
-          } catch (error) {
-            // Continue checking other paths
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error detecting iPhone:', error);
-      this.showTroubleshootingInfo();
+      console.error('\n✗ Error loading photos from iPhone:', error);
+      console.log('\nВозможные причины:');
+      console.log('• iPhone не подключен');
+      console.log('• iPhone заблокирован');
+      console.log('• Не выбрано "Доверять этому компьютеру"');
+      console.log('• Windows не имеет доступа к iPhone');
+    } finally {
+      this.isLoadingPhotos = false;
     }
   }
 
   /**
-   * Get real photos from iPhone DCIM folder using Shell COM
+   * Get photos from temporary directory
    */
-  private async getRealPhotos(offset: number, limit: number): Promise<PhotosResponse> {
+  private async getPhotosFromTempDir(offset: number, limit: number): Promise<PhotosResponse> {
     try {
-      if (this.photosCache.length === 0) {
-        console.log('Photos cache is empty, loading from device...');
-        await this.loadPhotosFromDevice();
-      }
-      
       const photos: Photo[] = [];
-      const slice = this.photosCache.slice(offset, offset + limit);
       
-      for (const photoData of slice) {
-        photos.push({
-          id: Buffer.from(photoData.Path).toString('base64'),
-          filename: photoData.Name,
-          dateCreated: new Date(),
-          dateModified: new Date(photoData.DateModified || Date.now()),
-          size: this.parseSize(photoData.Size),
-          width: 4032,
-          height: 3024,
-        });
+      // Check if temp directory exists
+      try {
+        await fs.access(this.tempPhotoDir);
+      } catch {
+        console.log('Temp directory not accessible, using mock data');
+        return await this.getMockPhotos(offset, limit);
+      }
+      
+      // Read all files from temp directory
+      const files = await fs.readdir(this.tempPhotoDir);
+      const imageFiles = files.filter(f => 
+        /\.(jpg|jpeg|png|heic|heif)$/i.test(f)
+      );
+      
+      this.realPhotosCount = imageFiles.length;
+      
+      if (this.realPhotosCount === 0) {
+        console.log('No photos in temp directory yet, using mock data');
+        return await this.getMockPhotos(offset, limit);
+      }
+      
+      console.log(`Found ${this.realPhotosCount} real photos in temp directory`);
+      
+      // Get requested slice
+      const slice = imageFiles.slice(offset, offset + limit);
+      
+      for (const filename of slice) {
+        const filePath = path.join(this.tempPhotoDir, filename);
+        try {
+          const stats = await fs.stat(filePath);
+          
+          photos.push({
+            id: Buffer.from(filePath).toString('base64'),
+            filename: filename,
+            dateCreated: stats.birthtime,
+            dateModified: stats.mtime,
+            size: stats.size,
+            width: 4032,
+            height: 3024,
+          });
+        } catch (error) {
+          console.error('Error reading file stats:', error);
+        }
       }
       
       return {
@@ -266,58 +192,9 @@ export class PhotoService {
         total: this.realPhotosCount,
       };
     } catch (error) {
-      console.error('Error reading real photos:', error);
-      return { photos: [], total: 0 };
+      console.error('Error reading photos from temp dir:', error);
+      return await this.getMockPhotos(offset, limit);
     }
-  }
-
-  /**
-   * Parse size string from Windows (e.g., "2.5 MB" to bytes)
-   */
-  private parseSize(sizeStr: string): number {
-    if (!sizeStr) return 0;
-    
-    const match = sizeStr.match(/([\d.]+)\s*([KMGT]?B)/i);
-    if (!match) return 0;
-    
-    const value = parseFloat(match[1]);
-    const unit = match[2].toUpperCase();
-    
-    const multipliers: { [key: string]: number } = {
-      'B': 1,
-      'KB': 1024,
-      'MB': 1024 * 1024,
-      'GB': 1024 * 1024 * 1024,
-      'TB': 1024 * 1024 * 1024 * 1024,
-    };
-    
-    return Math.floor(value * (multipliers[unit] || 1));
-  }
-
-  /**
-   * Recursively scan directory for image files
-   */
-  private async scanDirectory(dirPath: string): Promise<string[]> {
-    const files: string[] = [];
-    
-    try {
-      const entries = await fs.readdir(dirPath, { withFileTypes: true });
-      
-      for (const entry of entries) {
-        const fullPath = path.join(dirPath, entry.name);
-        
-        if (entry.isDirectory()) {
-          const subFiles = await this.scanDirectory(fullPath);
-          files.push(...subFiles);
-        } else if (entry.isFile()) {
-          files.push(fullPath);
-        }
-      }
-    } catch (error) {
-      console.error('Error scanning directory:', dirPath, error);
-    }
-    
-    return files;
   }
 
   /**
@@ -326,8 +203,7 @@ export class PhotoService {
   private async getMockPhotos(offset: number, limit: number): Promise<PhotosResponse> {
     console.log('Using mock photos for demo');
     
-    // Create more realistic mock data
-    const totalMockPhotos = 250; // More realistic number
+    const totalMockPhotos = 250;
     const mockPhotos: Photo[] = [];
     
     for (let i = offset; i < Math.min(offset + limit, totalMockPhotos); i++) {
@@ -350,43 +226,29 @@ export class PhotoService {
 
   async getThumbnail(photoId: string): Promise<string | null> {
     try {
-      // For real photos from device
-      if (this.devicePath && !photoId.startsWith('mock-')) {
-        const photoPath = Buffer.from(photoId, 'base64').toString('utf-8');
-        
-        try {
-          // Create temp file path
-          const tempDir = os.tmpdir();
-          const tempFile = path.join(tempDir, `iphone_photo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}${path.extname(photoPath)}`);
-          
-          console.log(`Copying photo from iPhone: ${path.basename(photoPath)}`);
-          
-          // Copy photo from iPhone to temp location
-          const { stdout } = await execAsync(
-            `powershell -NoProfile -ExecutionPolicy Bypass -File "${this.scriptPath}" -Action copy-photo -PhotoId "${photoPath}" -OutputPath "${tempFile}"`,
-            { maxBuffer: 1024 * 1024 * 100, timeout: 30000 }
-          );
-          
-          if (stdout.includes('SUCCESS:')) {
-            // Read file and convert to base64
-            const imageBuffer = await fs.readFile(tempFile);
-            const ext = path.extname(photoPath).toLowerCase();
-            const mimeType = ext === '.png' ? 'image/png' : 
-                           ext === '.heic' || ext === '.heif' ? 'image/heic' : 
-                           'image/jpeg';
-            
-            // Clean up temp file
-            await fs.unlink(tempFile).catch(() => {});
-            
-            return `data:${mimeType};base64,${imageBuffer.toString('base64')}`;
-          }
-        } catch (error) {
-          console.error('Error getting photo from iPhone:', error);
-        }
+      // Check if it's a mock photo
+      if (photoId.startsWith('mock-')) {
+        return this.generateMockThumbnail(photoId);
       }
       
-      // Fall back to mock thumbnail
-      return this.generateMockThumbnail(photoId);
+      // Decode file path from base64
+      const filePath = Buffer.from(photoId, 'base64').toString('utf-8');
+      
+      try {
+        // Read file from temp directory
+        const fileData = await fs.readFile(filePath);
+        
+        // Convert to base64 data URL
+        const ext = path.extname(filePath).toLowerCase();
+        const mimeType = ext === '.png' ? 'image/png' : 
+                       ext === '.heic' || ext === '.heif' ? 'image/heic' : 
+                       'image/jpeg';
+        
+        return `data:${mimeType};base64,${fileData.toString('base64')}`;
+      } catch (error) {
+        console.error('Error reading photo file:', filePath, error);
+        return this.generateMockThumbnail(photoId);
+      }
     } catch (error) {
       console.error('Error generating thumbnail:', error);
       return null;
@@ -415,7 +277,7 @@ export class PhotoService {
 
   async getFullResolution(photoId: string): Promise<string | null> {
     try {
-      // In production, fetch full resolution photo from iPhone
+      // For now, same as thumbnail
       return await this.getThumbnail(photoId);
     } catch (error) {
       console.error('Error getting full resolution:', error);
@@ -425,13 +287,29 @@ export class PhotoService {
 
   async transferPhotos(photoIds: string[], destination: string): Promise<{ success: boolean; transferred: number; error?: string }> {
     try {
-      // Simulate transfer delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      let transferred = 0;
       
-      // In production, actually transfer photos from iPhone to destination
+      for (const photoId of photoIds) {
+        if (photoId.startsWith('mock-')) {
+          continue; // Skip mock photos
+        }
+        
+        try {
+          const filePath = Buffer.from(photoId, 'base64').toString('utf-8');
+          const filename = path.basename(filePath);
+          const destPath = path.join(destination, filename);
+          
+          // Copy file from temp to destination
+          await fs.copyFile(filePath, destPath);
+          transferred++;
+        } catch (error) {
+          console.error('Error transferring photo:', error);
+        }
+      }
+      
       return {
         success: true,
-        transferred: photoIds.length,
+        transferred,
       };
     } catch (error) {
       return {
