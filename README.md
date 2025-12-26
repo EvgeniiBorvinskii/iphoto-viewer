@@ -78,7 +78,7 @@
 
 ```powershell
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/iphoto-viewer.git
+git clone https://github.com/EvgeniiBorvinskii/iphoto-viewer.git
 cd iphoto-viewer
 
 # Install dependencies
@@ -274,9 +274,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 👨‍💻 Author
 
-**KeyWest**
+**Evgenii Borvinskii**
 
-- GitHub: [@YOUR_USERNAME](https://github.com/YOUR_USERNAME)
+- GitHub: [@EvgeniiBorvinskii](https://github.com/EvgeniiBorvinskii)
 
 ---
 
@@ -293,9 +293,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 Found a bug or have a feature request?
 
-- 🐛 [Open an issue](https://github.com/YOUR_USERNAME/iphoto-viewer/issues)
-- 💡 [Request a feature](https://github.com/YOUR_USERNAME/iphoto-viewer/issues/new)
-- 📧 Email: your-email@example.com
+- 🐛 [Open an issue](https://github.com/EvgeniiBorvinskii/iphoto-viewer/issues)
+- 💡 [Request a feature](https://github.com/EvgeniiBorvinskii/iphoto-viewer/issues/new)
+- 📧 Email: contact@evgenii.dev
 
 ---
 

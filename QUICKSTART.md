@@ -14,7 +14,7 @@ Make sure you have installed:
 
 ```powershell
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/iphoto-viewer.git
+git clone https://github.com/EvgeniiBorvinskii/iphoto-viewer.git
 cd iphoto-viewer
 
 # Install dependencies
@@ -96,8 +96,8 @@ npm run build:win
 ## Need Help?
 
 - 📖 Read the [full documentation](README.md)
-- 🐛 [Report a bug](https://github.com/YOUR_USERNAME/iphoto-viewer/issues)
-- 💡 [Request a feature](https://github.com/YOUR_USERNAME/iphoto-viewer/issues/new)
+- 🐛 [Report a bug](https://github.com/EvgeniiBorvinskii/iphoto-viewer/issues)
+- 💡 [Request a feature](https://github.com/EvgeniiBorvinskii/iphoto-viewer/issues/new)
 
 ## What's Next?
 

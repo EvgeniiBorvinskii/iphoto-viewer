@@ -21,8 +21,8 @@
 ```powershell
 cd "c:\Users\KeyWest\Desktop\PROJECTS\IPhotoViewer"
 
-# Добавьте удаленный репозиторий (замените YOUR_USERNAME на ваш GitHub username)
-git remote add origin https://github.com/YOUR_USERNAME/iphoto-viewer.git
+# Добавьте удаленный репозиторий
+git remote add origin https://github.com/EvgeniiBorvinskii/iphoto-viewer.git
 
 # Переименуйте ветку в main (если нужно)
 git branch -M main
