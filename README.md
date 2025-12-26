@@ -1,5 +1,7 @@
 # iPhoto Viewer 📱✨
 
+<img width="2167" height="1155" alt="image" src="https://github.com/user-attachments/assets/2211193f-8348-4a60-be44-0b9415bd424a" />
+
 <div align="center">
 
 ![iPhoto Viewer Banner](https://img.shields.io/badge/iPhoto_Viewer-Modern_iPhone_Photo_Manager-blueviolet?style=for-the-badge&logo=apple)
