@@ -73,13 +73,46 @@ export class SimplePhotoService {
       
       console.log('✓ iPhone device found!');
       
-      // Step 2: Try to access via Windows Photos API
-      console.log('Step 2: Trying Windows Photos API...');
-      
       let photosFound = 0;
       let foundDrive = '';
       
+      // Step 2: Use improved PowerShell script
+      console.log('Step 2: Using improved PowerShell with proper COM access...');
+      
       try {
+        const scriptPath = path.join(__dirname, '../utils/GetIPhonePhotos.ps1');
+        const { stdout: psOutput } = await execAsync(
+          `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}"`,
+          { maxBuffer: 10 * 1024 * 1024, timeout: 60000 }
+        );
+        
+        console.log('PowerShell script output:', psOutput.substring(0, 1000));
+        
+        if (psOutput.includes('FOUND_IPHONE')) {
+          console.log('✓ PowerShell script found iPhone!');
+          
+          const totalMatch = psOutput.match(/TOTAL_PHOTOS:(\d+)/);
+          if (totalMatch) {
+            photosFound = parseInt(totalMatch[1]) || 0;
+            console.log(`✓ Found ${photosFound} photos via PowerShell!`);
+          }
+          
+          // Count photo lines
+          const photoLines = psOutput.split('\n').filter(line => line.startsWith('PHOTO:'));
+          if (photoLines.length > 0 && photosFound === 0) {
+            photosFound = photoLines.length;
+            console.log(`✓ Counted ${photosFound} photos from output`);
+          }
+        }
+      } catch (error: any) {
+        console.log('PowerShell script error:', error.message);
+      }
+      
+      // Step 3: Try Windows Photos API
+      if (photosFound === 0) {
+        console.log('Step 3: Trying Windows Photos API fallback...');
+      
+        try {
         const psScript = `
           Add-Type -AssemblyName System.Runtime.WindowsRuntime
           
@@ -155,10 +188,11 @@ export class SimplePhotoService {
       } catch (error) {
         console.log('Windows Photos API failed:', error);
       }
+      }
       
-      // Step 3: Check all drive letters for DCIM
+      // Step 4: Check all drive letters for DCIM
       if (photosFound === 0) {
-        console.log('Step 3: Checking drive letters for DCIM...');
+        console.log('Step 4: Checking drive letters for DCIM...');
       
         for (let charCode = 68; charCode <= 90; charCode++) {
           const drive = String.fromCharCode(charCode) + ':';
@@ -227,9 +261,15 @@ export class SimplePhotoService {
    * Load mock photos for demo
    */
   private loadMockPhotos(): void {
-    console.log('Loading demo photos (250 photos)');
+    console.log('⚠️ Loading demo photos (350 photos) - iPhone photos not accessible');
+    console.log('');
+    console.log('📌 To see YOUR iPhone photos, you need:');
+    console.log('   1. Install iTunes from Microsoft Store');
+    console.log('   2. OR sync photos via iCloud for Windows');
+    console.log('   3. OR import photos to Windows using "Import photos and videos"');
+    console.log('');
     
-    this.photos = Array.from({ length: 250 }, (_, i) => ({
+    this.photos = Array.from({ length: 350 }, (_, i) => ({
       id: `demo-photo-${i + 1}`,
       filename: `IMG_${String(i + 1).padStart(4, '0')}.jpg`,
       dateCreated: new Date(Date.now() - Math.random() * 365 * 24 * 60 * 60 * 1000),
@@ -238,6 +278,8 @@ export class SimplePhotoService {
       width: 4032,
       height: 3024,
     }));
+    
+    console.log(`✓ Loaded ${this.photos.length} demo photos`);
   }
 
   /**
