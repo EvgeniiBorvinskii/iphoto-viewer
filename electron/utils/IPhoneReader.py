@@ -18,7 +18,9 @@ try:
             # Get device UDIDs
             from pymobiledevice3.usbmux import list_devices as list_usb_devices
             devices = list_usb_devices()
-            return [{"udid": device.serial, "connection_type": device.connection_type} for device in devices]
+            result = [{"udid": device.serial, "connection_type": device.connection_type} for device in devices]
+            print(json.dumps(result))
+            return result
         except Exception as e:
             print(json.dumps({"error": str(e)}))
             return []

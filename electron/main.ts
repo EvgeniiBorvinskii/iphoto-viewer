@@ -32,14 +32,14 @@ function createWindow() {
     show: false,
   });
 
-  // Set Content Security Policy
+  // Set Content Security Policy (secure for production, relaxed for dev)
   mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {
         ...details.responseHeaders,
         'Content-Security-Policy': [
           isDev
-            ? "default-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:* ws://localhost:*"
+            ? "default-src 'self' 'unsafe-inline' http://localhost:* ws://localhost:*; script-src 'self' 'unsafe-inline' http://localhost:*"
             : "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
         ]
       }
