@@ -1,0 +1,248 @@
+.connection-panel {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+}
+
+.connection-card {
+  width: 100%;
+  max-width: 560px;
+  padding: 48px;
+  border-radius: 24px;
+  animation: fadeIn 0.5s ease;
+}
+
+.connection-header {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.connection-header h1 {
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  color: rgba(255, 255, 255, 0.95);
+  letter-spacing: -0.5px;
+}
+
+.light .connection-header h1 {
+  color: rgba(0, 0, 0, 0.95);
+}
+
+.connection-header p {
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 400;
+}
+
+.light .connection-header p {
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.connection-tabs {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 32px;
+  padding: 6px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 12px;
+}
+
+.light .connection-tabs {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 15px;
+  font-weight: 500;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.light .tab {
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.tab.active {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.light .tab.active {
+  background: rgba(255, 255, 255, 0.9);
+  color: rgba(0, 0, 0, 0.95);
+}
+
+.connection-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.info-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 12px;
+}
+
+.info-box svg {
+  flex-shrink: 0;
+  color: rgba(59, 130, 246, 0.8);
+}
+
+.info-box p {
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+  margin-bottom: 4px;
+}
+
+.light .info-box p {
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.info-box span {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.light .info-box span {
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.connect-button,
+.scan-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px 32px;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.connect-button.primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.connect-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.scan-button {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.light .scan-button {
+  background: rgba(0, 0, 0, 0.05);
+  color: rgba(0, 0, 0, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ip-input {
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.9);
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.light .ip-input {
+  color: rgba(0, 0, 0, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.ip-input:focus {
+  border-color: #667eea;
+}
+
+.ip-input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.light .ip-input::placeholder {
+  color: rgba(0, 0, 0, 0.4);
+}
+
+.device-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.device-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.device-item span {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.light .device-item span {
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.device-ip {
+  font-family: 'Courier New', monospace;
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+.light .device-ip {
+  color: rgba(0, 0, 0, 0.6) !important;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

@@ -1,0 +1,98 @@
+.title-bar {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  border-radius: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  -webkit-app-region: drag;
+  z-index: 1000;
+}
+
+.title-bar-left,
+.title-bar-center,
+.title-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  -webkit-app-region: no-drag;
+}
+
+.title-bar-left {
+  flex: 1;
+}
+
+.title-bar-center {
+  flex: 0;
+}
+
+.title-bar-right {
+  flex: 1;
+  justify-content: flex-end;
+}
+
+.app-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  letter-spacing: 0.3px;
+}
+
+.light .app-title {
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.theme-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.8);
+  transition: all 0.2s ease;
+}
+
+.theme-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.light .theme-toggle {
+  color: rgba(0, 0, 0, 0.8);
+}
+
+.light .theme-toggle:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.window-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.8);
+  transition: all 0.2s ease;
+}
+
+.light .window-button {
+  color: rgba(0, 0, 0, 0.8);
+}
+
+.window-button.close:hover {
+  color: white;
+}
