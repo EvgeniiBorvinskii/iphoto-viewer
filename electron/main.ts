@@ -3,10 +3,11 @@ import * as path from 'path';
 import { exec } from 'child_process';
 import { IPhoneService } from './services/IPhoneService';
 import { SimplePhotoService } from './services/SimplePhotoService';
+import { IPhonePhotoService } from './services/IPhonePhotoService';
 
 let mainWindow: BrowserWindow | null = null;
 let iPhoneService: IPhoneService;
-let photoService: SimplePhotoService;
+let photoService: IPhonePhotoService; // Changed to IPhonePhotoService (like 3uTools)
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
@@ -63,7 +64,7 @@ function createWindow() {
 
 app.whenReady().then(() => {
   iPhoneService = new IPhoneService();
-  photoService = new SimplePhotoService();
+  photoService = new IPhonePhotoService(); // Now using pymobiledevice3 (like 3uTools!)
   
   createWindow();
 
