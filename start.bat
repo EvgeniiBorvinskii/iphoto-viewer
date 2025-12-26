@@ -1,16 +1,8 @@
 @echo off
-echo ================================================
-echo   iPhoto Viewer - Development Mode
-echo ================================================
-echo.
-echo Starting the application...
-echo.
-echo This will:
-echo  1. Start Vite development server
-echo  2. Launch Electron application
-echo.
-echo Press Ctrl+C to stop the application
-echo ================================================
-echo.
+if not "%1"=="am_admin" (
+    powershell -WindowStyle Hidden -Command "Start-Process -FilePath '%~f0' -ArgumentList 'am_admin' -WindowStyle Hidden"
+    exit /b
+)
 
+cd /d "%~dp0"
 npm run dev

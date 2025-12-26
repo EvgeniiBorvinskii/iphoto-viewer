@@ -19,10 +19,19 @@ contextBridge.exposeInMainWorld('electron', {
     ipcRenderer.invoke('transfer-photos', photoIds, destination),
 });
 
-export type ElectronAPI = typeof electron;
-
 declare global {
   interface Window {
-    electron: ElectronAPI;
+    electron: {
+      minimizeWindow: () => void;
+      maximizeWindow: () => void;
+      closeWindow: () => void;
+      connectUSB: () => Promise<any>;
+      connectWiFi: (ipAddress: string) => Promise<any>;
+      discoverIPhones: () => Promise<any[]>;
+      getPhotos: (offset: number, limit: number) => Promise<any>;
+      getPhotoThumbnail: (photoId: string) => Promise<string | null>;
+      getPhotoFull: (photoId: string) => Promise<string | null>;
+      transferPhotos: (photoIds: string[], destination: string) => Promise<any>;
+    };
   }
 }

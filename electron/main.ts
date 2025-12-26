@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, screen } from 'electron';
 import * as path from 'path';
+import { exec } from 'child_process';
 import { IPhoneService } from './services/IPhoneService';
 import { PhotoService } from './services/PhotoService';
 
@@ -61,6 +62,13 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  // Auto-sync with GitHub before closing
+  if (process.platform === 'win32') {
+    exec('powershell -ExecutionPolicy Bypass -File auto-sync.ps1', { cwd: process.cwd() }, (error) => {
+      if (error) console.error('Auto-sync error:', error);
+    });
+  }
+  
   if (process.platform !== 'darwin') {
     app.quit();
   }

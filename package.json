@@ -4,10 +4,11 @@
   "description": "Modern iPhone photo viewer with Liquid Glass design, drag-and-drop support, USB/WiFi connectivity",
   "main": "dist/electron/main.js",
   "scripts": {
-    "dev": "concurrently \"npm run dev:react\" \"npm run dev:electron\"",
+    "dev": "npm run build:electron && concurrently \"npm run dev:react\" \"npm run dev:electron\"",
     "dev:react": "vite",
-    "dev:electron": "wait-on tcp:5173 && electron .",
-    "build": "tsc && vite build && electron-builder",
+    "dev:electron": "wait-on tcp:5173 && electron . --no-sandbox",
+    "build:electron": "tsc -p electron/tsconfig.json",
+    "build": "npm run build:electron && tsc && vite build && electron-builder",
     "build:win": "npm run build -- --win",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
