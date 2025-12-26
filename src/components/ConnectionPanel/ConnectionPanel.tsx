@@ -28,9 +28,23 @@ const ConnectionPanel: React.FC<ConnectionPanelProps> = ({ onConnect }) => {
 
   const handleScan = async () => {
     setIsScanning(true);
-    const foundDevices = await discoverDevices();
-    setDevices(foundDevices);
-    setIsScanning(false);
+    setDevices([]);
+    
+    console.log('Starting scan for devices...');
+    
+    try {
+      const foundDevices = await discoverDevices();
+      console.log('Scan complete. Devices found:', foundDevices);
+      setDevices(foundDevices);
+      
+      if (foundDevices.length === 0) {
+        console.warn('No devices found. Make sure devices are on the same network.');
+      }
+    } catch (error) {
+      console.error('Scan failed:', error);
+    } finally {
+      setIsScanning(false);
+    }
   };
 
   return (
@@ -147,7 +161,7 @@ const ConnectionPanel: React.FC<ConnectionPanelProps> = ({ onConnect }) => {
                 {isScanning ? (
                   <>
                     <div className="spinner"></div>
-                    Scanning...
+                    Scanning network...
                   </>
                 ) : (
                   <>
@@ -159,6 +173,22 @@ const ConnectionPanel: React.FC<ConnectionPanelProps> = ({ onConnect }) => {
                   </>
                 )}
               </motion.button>
+
+              {devices.length > 0 && (
+                <motion.div
+                  className="scan-info"
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                >
+                  Found {devices.length} device{devices.length > 1 ? 's' : ''}
+                </motion.div>
+              )}
+
+              {!isScanning && devices.length === 0 && wifiIp === '' && (
+                <div className="scan-hint">
+                  Click "Scan for Devices" to find iPhones on your network
+                </div>
+              )}
 
               {devices.length > 0 && (
                 <div className="device-list">

@@ -26,8 +26,23 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
+      devTools: isDev,
     },
     show: false,
+  });
+
+  // Set Content Security Policy
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          isDev
+            ? "default-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:* ws://localhost:*"
+            : "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+        ]
+      }
+    });
   });
 
   mainWindow.once('ready-to-show', () => {
@@ -113,7 +128,10 @@ function setupIPCHandlers() {
 
   ipcMain.handle('discover-iphones', async () => {
     try {
-      return await iPhoneService.discoverDevices();
+      console.log('Discovering iPhones...');
+      const devices = await iPhoneService.discoverDevices();
+      console.log('Found devices:', devices);
+      return devices;
     } catch (error) {
       console.error('Discovery error:', error);
       return [];
